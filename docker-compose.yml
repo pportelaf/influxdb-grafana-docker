@@ -1,0 +1,75 @@
+version: '3'
+services:
+  influxdb:
+    image: influxdb:${INFLUXDB_VERSION}
+    container_name: influxdb
+    entrypoint: ["sh"]
+    command: ["-c", "update-ca-certificates && /entrypoint.sh influxd"]
+    ports:
+      - 8086:8086
+    environment:
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_INIT_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_INIT_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_INIT_TOKEN}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_INIT_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_INIT_BUCKET}
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - INFLUXD_TLS_CERT=/etc/influxdb2/tls/server.crt
+      - INFLUXD_TLS_KEY=/etc/influxdb2/tls/server.key
+    volumes:
+      - ./tls:/etc/influxdb2/tls
+      - influx-data:/var/lib/influxdb2
+      - ./tls/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
+
+  telegraf:
+    image: telegraf:${TELEGRAF_VERSION}
+    container_name: telegraf
+    entrypoint: ["sh"]
+    command: ["-c", "update-ca-certificates && /entrypoint.sh telegraf"]
+    env_file: 
+      - ./.env
+    container_name: telegraf
+    links:
+      - influxdb
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - ./tls/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
+
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION}
+    container_name: grafana
+    entrypoint: ["sh"]
+    command: ["-c", "update-ca-certificates && /run.sh"]
+    ports:
+      - 443:3000
+    volumes:
+      - ./tls:/etc/grafana/tls
+      - grafana-data:/var/lib/grafana
+      - ./tls/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
+      - ./grafana/plugins:/usr/share/grafana/grafana-plugins
+    environment:
+      - GF_RENDERING_SERVER_URL=http://renderer:8081/render
+      - GF_RENDERING_CALLBACK_URL=https://grafana:3000/
+      - GF_SERVER_CERT_FILE=/etc/grafana/tls/server.crt
+      - GF_SERVER_CERT_KEY=/etc/grafana/tls/server.key
+      - GF_SERVER_PROTOCOL=https
+      - GF_PATHS_PLUGINS=/usr/share/grafana/grafana-plugins
+      - GF_SERVER_ROOT_URL=${GRAFANA_SERVER_ROOT_URL}
+    user: "0"
+    links: 
+      - influxdb
+
+  renderer:
+    image: grafana/grafana-image-renderer:${GRAFANA_IMAGE_RENDERER_VERSION}
+    ports:
+      - 8081
+    environment:
+      - IGNORE_HTTPS_ERRORS=true
+    links:
+      - grafana
+
+volumes:
+  influx-data:
+    driver: local
+  grafana-data:
+    driver: local
