@@ -1,53 +1,55 @@
 version: '3'
 services:
-  influxdb_new:
-    image: influxdb:2.0
-    container_name: influxdb_new
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
     ports:
       - 8086:8086
     environment:
-      - DOCKER_INFLUXDB_INIT_USERNAME=portela-tfg
-      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_PASSWORD}
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
-      - DOCKER_INFLUXDB_INIT_ORG=portela-tfg-org
-      - DOCKER_INFLUXDB_INIT_BUCKET=portela-tfg-bucket
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_INIT_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_INIT_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_INIT_TOKEN}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUXDB_INIT_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUXDB_INIT_BUCKET}
       - DOCKER_INFLUXDB_INIT_MODE=setup
-      - INFLUXD_TLS_CERT=/etc/influxdb2/ssl/server.crt
-      - INFLUXD_TLS_KEY=/etc/influxdb2/ssl/server.key
+      - INFLUXD_TLS_CERT=/etc/influxdb2/tls/server.crt
+      - INFLUXD_TLS_KEY=/etc/influxdb2/tls/server.key
     volumes:
-      - ./ssl:/etc/influxdb2/ssl
+      - ./tls:/etc/influxdb2/tls
       - influx-data:/var/lib/influxdb2
-      - ./ssl/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
+      - ./tls/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
 
-  telegraf_new:
+  telegraf:
     image: telegraf:latest
-    container_name: telegraf_new
+    env_file: 
+      - ./.env
+    container_name: telegraf
     links:
-      - influxdb_new
+      - influxdb
     volumes:
-      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
-      - ./ssl/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - ./tls/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
 
   grafana:
-    command: bash -c "grafana-cli plugins uninstall grafana-image-renderer"
     image: grafana/grafana:latest
     container_name: grafana
     ports:
       - 443:3000
     volumes:
-      - ./ssl:/etc/grafana/ssl
+      - ./tls:/etc/grafana/tls
       - grafana-data:/var/lib/grafana
-      - ./ssl/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
+      - ./tls/ca.crt:/usr/local/share/ca-certificates/rootCA.crt:ro
+      - ./grafana/plugins:/usr/share/grafana/grafana-plugins
     environment:
       - GF_RENDERING_SERVER_URL=http://renderer:8081/render
       - GF_RENDERING_CALLBACK_URL=https://grafana:3000/
-      - GF_SERVER_CERT_FILE=/etc/grafana/ssl/server.crt
-      - GF_SERVER_CERT_KEY=/etc/grafana/ssl/server.key
+      - GF_SERVER_CERT_FILE=/etc/grafana/tls/server.crt
+      - GF_SERVER_CERT_KEY=/etc/grafana/tls/server.key
       - GF_SERVER_PROTOCOL=https
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,briangann-gauge-panel,natel-plotly-panel,grafana-simple-json-datasource
+      - GF_PATHS_PLUGINS=/usr/share/grafana/grafana-plugins
     user: "0"
     links: 
-      - influxdb_new
+      - influxdb
 
   renderer:
     image: grafana/grafana-image-renderer:latest
@@ -57,6 +59,7 @@ services:
       - IGNORE_HTTPS_ERRORS=true
     links:
       - grafana
+
 volumes:
   influx-data:
     driver: local
